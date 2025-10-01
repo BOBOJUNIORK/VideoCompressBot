@@ -1,22 +1,31 @@
 FROM python:3.11-slim
 
-# Installer les dépendances
+# Installer les dépendances de compilation
 RUN apt-get update && apt-get install -y \
     wget \
     curl \
+    git \
+    build-essential \
+    cmake \
+    g++ \
+    libssl-dev \
+    zlib1g-dev \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# Télécharger le binaire avec vérification
-RUN echo "📥 Téléchargement du Bot API Server..." && \
-    wget --progress=dot:giga -O /usr/local/bin/telegram-bot-api \
-    "https://github.com/tdlib/telegram-bot-api/releases/download/v7.8.0/telegram-bot-api-Linux" && \
-    chmod +x /usr/local/bin/telegram-bot-api
-
-# Vérifier que le binaire fonctionne
-RUN echo "🔍 Vérification de l'installation..." && \
-    /usr/local/bin/telegram-bot-api --version && \
-    echo "✅ Bot API Server installé avec succès"
+# Cloner et compiler le Bot API Server depuis les sources
+WORKDIR /tmp
+RUN git clone https://github.com/tdlib/td.git && \
+    cd td && \
+    mkdir build && cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release .. && \
+    cmake --build . --target prepare_cross_compiling && \
+    cd .. && mkdir build2 && cd build2 && \
+    cmake -DCMAKE_BUILD_TYPE=Release .. && \
+    cmake --build . --target telegram-bot-api && \
+    cp bin/telegram-bot-api /usr/local/bin/ && \
+    chmod +x /usr/local/bin/telegram-bot-api && \
+    cd /tmp && rm -rf td
 
 WORKDIR /app
 COPY requirements.txt .
