@@ -7,15 +7,16 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# Télécharger et installer le binaire précompilé
-RUN wget -O telegram-bot-api.tar.gz "https://github.com/tdlib/telegram-bot-api/releases/download/v7.8.0/telegram-bot-api_Linux_x86_64.tar.gz" && \
-    tar -xzf telegram-bot-api.tar.gz && \
-    mv telegram-bot-api /usr/local/bin/ && \
-    chmod +x /usr/local/bin/telegram-bot-api && \
-    rm telegram-bot-api.tar.gz
+# Télécharger le binaire avec vérification
+RUN echo "📥 Téléchargement du Bot API Server..." && \
+    wget --progress=dot:giga -O /usr/local/bin/telegram-bot-api \
+    "https://github.com/tdlib/telegram-bot-api/releases/download/v7.8.0/telegram-bot-api-Linux" && \
+    chmod +x /usr/local/bin/telegram-bot-api
 
-# Vérifier l'installation
-RUN telegram-bot-api --version
+# Vérifier que le binaire fonctionne
+RUN echo "🔍 Vérification de l'installation..." && \
+    /usr/local/bin/telegram-bot-api --version && \
+    echo "✅ Bot API Server installé avec succès"
 
 WORKDIR /app
 COPY requirements.txt .
