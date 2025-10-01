@@ -8,7 +8,6 @@ from telegram.ext import Application, MessageHandler, filters, ContextTypes, Cal
 from telegram.request import HTTPXRequest
 
 # === CONFIGURATION SÉCURISÉE ===
-# Les variables sensibles sont maintenant dans les variables d'environnement
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 WATERMARK_TEXT = os.getenv("WATERMARK_TEXT", "© HazardCompressBot")
 OUTPUT_DIR = "output_videos"
@@ -39,27 +38,27 @@ RESOLUTIONS = {
 }
 
 def check_ffmpeg():
-    """Vérifie si FFmpeg est installé"""
+    """Vérifie si FFmpeg est installé et accessible"""
     try:
-        subprocess.run(["ffmpeg", "-version"], check=True, capture_output=True)
+        result = subprocess.run(
+            ["ffmpeg", "-version"], 
+            check=True, 
+            capture_output=True, 
+            text=True,
+            timeout=10
+        )
+        logger.info("✅ FFmpeg détecté avec succès")
+        logger.info(f"FFmpeg version: {result.stdout.splitlines()[0] if result.stdout else 'Unknown'}")
         return True
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except subprocess.CalledProcessError as e:
+        logger.error(f"❌ Erreur FFmpeg: {e.stderr}")
         return False
-
-async def download_file_direct(url, destination):
-    """Télécharge un fichier directement depuis l'URL Telegram avec aiohttp"""
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            if response.status == 200:
-                with open(destination, 'wb') as f:
-                    while True:
-                        chunk = await response.content.read(8192)
-                        if not chunk:
-                            break
-                        f.write(chunk)
-                return True
-            else:
-                return False
+    except FileNotFoundError:
+        logger.error("❌ FFmpeg non trouvé dans le PATH")
+        return False
+    except subprocess.TimeoutExpired:
+        logger.error("❌ Timeout lors de la vérification FFmpeg")
+        return False
 
 async def compress_and_send_single(input_path: str, resolution: str, message, user_id, file_id):
     """Compresse et envoie une seule résolution"""
@@ -70,8 +69,7 @@ async def compress_and_send_single(input_path: str, resolution: str, message, us
     try:
         # Commande FFmpeg optimisée
         cmd = [
-            "ffmpeg",
-            "-y",
+            "ffmpeg", "-y",
             "-i", input_path,
             "-vf", f"scale={res_config['scale']}",
             "-c:v", "libx264",
@@ -84,7 +82,9 @@ async def compress_and_send_single(input_path: str, resolution: str, message, us
             output_path
         ]
         
-        # Compression
+        logger.info(f"Compression {resolution} en cours...")
+        
+        # Compression avec timeout
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=subprocess.PIPE,
@@ -94,12 +94,14 @@ async def compress_and_send_single(input_path: str, resolution: str, message, us
         stdout, stderr = await process.communicate()
         
         if process.returncode != 0:
-            raise Exception(f"FFmpeg error: {stderr.decode()}")
+            error_msg = stderr.decode() if stderr else "Unknown error"
+            logger.error(f"Erreur FFmpeg {resolution}: {error_msg}")
+            raise Exception(f"FFmpeg error: {error_msg}")
         
         if not os.path.exists(output_path):
             raise Exception("Fichier de sortie non créé")
         
-        # Envoyer IMMÉDIATEMENT après compression
+        # Envoyer le fichier
         file_size = os.path.getsize(output_path)
         file_size_mb = file_size // (1024 * 1024)
         
@@ -109,14 +111,11 @@ async def compress_and_send_single(input_path: str, resolution: str, message, us
                     document=f,
                     caption=f"🎬 {resolution} - {file_size_mb}MB"
                 )
-            logger.info(f"✅ {resolution} envoyé avec succès ({file_size_mb}MB)")
+            logger.info(f"✅ {resolution} envoyé ({file_size_mb}MB)")
         else:
-            await message.reply_text(
-                f"📁 {resolution} - Fichier compressé ({file_size_mb}MB) trop gros pour Telegram\n"
-                f"💡 Solution: Réduisez la qualité ou la durée de la vidéo"
-            )
+            await message.reply_text(f"📁 {resolution} - Trop volumineux ({file_size_mb}MB)")
         
-        # Nettoyer IMMÉDIATEMENT après envoi
+        # Nettoyer
         os.remove(output_path)
         return True
         
@@ -232,15 +231,17 @@ async def error_handler(update: Update, context: CallbackContext):
 
 def main():
     """Point d'entrée principal"""
+    print("🔍 Vérification de FFmpeg...")
+    
     if not check_ffmpeg():
-        print("❌ ERREUR: FFmpeg n'est pas installé ou n'est pas dans le PATH")
+        print("❌ ERREUR CRITIQUE: FFmpeg n'est pas installé ou n'est pas accessible")
+        print("💡 Solution: Assurez-vous que FFmpeg est installé dans le conteneur Docker")
         return
 
     print("✅ FFmpeg détecté - Démarrage du bot...")
     print("🌐 Mode: LOCAL API (fichiers jusqu'à 2GB supportés)")
-    print(f"🔐 Bot configuré avec token sécurisé: {BOT_TOKEN[:10]}...")  # Log partiel pour vérification
     
-    # Configuration avec timeout étendus
+    # Configuration de l'application
     application = (
         Application.builder()
         .token(BOT_TOKEN)
@@ -262,16 +263,11 @@ def main():
         filters.Document.MimeType("video/webm")
     )
     
-    # Gestionnaires
     application.add_handler(MessageHandler(video_filter, handle_video))
-    application.add_error_handler(error_handler)
     
     print("🚀 Bot démarré avec succès!")
-    print("📹 Envoyez une vidéo pour la compresser en multiples résolutions")
-    print(f"💾 Taille maximale supportée: {MAX_FILE_SIZE // (1024*1024)}MB")
-    print(f"🏷️  Filigrane: {WATERMARK_TEXT}")
+    print("📹 Envoyez une vidéo pour la compresser")
     
-    # Démarrer le bot
     application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
