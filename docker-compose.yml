@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  video-compress-bot:
+    build: .
+    container_name: video_compress_bot
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - API_ID=${API_ID}
+      - API_HASH=${API_HASH}
+      - BOT_API_SERVER=http://localhost:8081
+      - MAX_FILE_SIZE=2000000000
+    volumes:
+      - ./output_videos:/tmp/output_videos
+    stdin_open: true
+    tty: true
