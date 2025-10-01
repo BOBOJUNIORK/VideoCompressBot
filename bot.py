@@ -60,6 +60,26 @@ def check_ffmpeg():
         logger.error("❌ Timeout lors de la vérification FFmpeg")
         return False
 
+async def download_file_direct(file_url: str, dest_path: str, chunk_size: int = 1024*1024):
+    """Télécharge un fichier Telegram via URL directe en streaming (supporte jusqu'à 2GB)."""
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=0)) as session:
+            async with session.get(file_url) as resp:
+                if resp.status != 200:
+                    raise Exception(f"Échec HTTP {resp.status}")
+                
+                total = 0
+                with open(dest_path, "wb") as f:
+                    async for chunk in resp.content.iter_chunked(chunk_size):
+                        f.write(chunk)
+                        total += len(chunk)
+                
+                logger.info(f"✅ Téléchargement terminé ({total // (1024*1024)}MB)")
+                return True
+    except Exception as e:
+        logger.error(f"❌ Échec téléchargement direct: {e}")
+        return False
+
 async def compress_and_send_single(input_path: str, resolution: str, message, user_id, file_id):
     """Compresse et envoie une seule résolution"""
     res_config = RESOLUTIONS[resolution]
@@ -67,7 +87,6 @@ async def compress_and_send_single(input_path: str, resolution: str, message, us
     output_path = f"{base_name}_{resolution}.mp4"
     
     try:
-        # Commande FFmpeg optimisée
         cmd = [
             "ffmpeg", "-y",
             "-i", input_path,
@@ -84,7 +103,6 @@ async def compress_and_send_single(input_path: str, resolution: str, message, us
         
         logger.info(f"Compression {resolution} en cours...")
         
-        # Compression avec timeout
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=subprocess.PIPE,
@@ -101,7 +119,6 @@ async def compress_and_send_single(input_path: str, resolution: str, message, us
         if not os.path.exists(output_path):
             raise Exception("Fichier de sortie non créé")
         
-        # Envoyer le fichier
         file_size = os.path.getsize(output_path)
         file_size_mb = file_size // (1024 * 1024)
         
@@ -115,7 +132,6 @@ async def compress_and_send_single(input_path: str, resolution: str, message, us
         else:
             await message.reply_text(f"📁 {resolution} - Trop volumineux ({file_size_mb}MB)")
         
-        # Nettoyer
         os.remove(output_path)
         return True
         
@@ -134,36 +150,28 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     compression_tasks = []
     
     try:
-        # Vérifier si c'est une vidéo ou un document
         video = message.video or message.document
         
         if not video:
             await message.reply_text("❌ Veuillez envoyer une vidéo (MP4, MKV, AVI, MOV...)")
             return
 
-        # Vérifier la taille du fichier
         if video.file_size > MAX_FILE_SIZE:
             await message.reply_text(
                 f"❌ Fichier trop volumineux. Taille maximale: {MAX_FILE_SIZE // (1024*1024)}MB"
             )
             return
 
-        # Message de démarrage
         start_msg = await message.reply_text("🚀 Démarrage de la compression multi-résolution...")
         
-        # Télécharger la vidéo
         file_id = video.file_id
         file = await context.bot.get_file(file_id)
-        
-        # Créer un nom de fichier unique
         input_path = os.path.join(OUTPUT_DIR, f"input_{user_id}_{file_id}.mp4")
         
-        # Téléchargement avec gestion d'erreur améliorée
         try:
             await file.download_to_drive(custom_path=input_path)
             logger.info(f"Fichier téléchargé: {input_path}")
         except Exception as download_error:
-            # Fallback: téléchargement direct si le premier échoue
             logger.warning(f"Téléchargement standard échoué, tentative directe: {download_error}")
             try:
                 file_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file.file_path}"
@@ -174,7 +182,6 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await start_msg.edit_text(f"❌ Erreur téléchargement: {str(e)}")
                 return
 
-        # Vérifier que le fichier a bien été téléchargé
         if not os.path.exists(input_path) or os.path.getsize(input_path) == 0:
             await start_msg.edit_text("❌ Échec du téléchargement du fichier")
             return
@@ -182,20 +189,15 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_size_mb = os.path.getsize(input_path) // (1024 * 1024)
         await start_msg.edit_text(f"📥 Fichier téléchargé ({file_size_mb}MB) - Lancement des compressions...")
         
-        # Lancer toutes les compressions en parallèle
         for resolution in RESOLUTIONS.keys():
             task = asyncio.create_task(
                 compress_and_send_single(input_path, resolution, message, user_id, file_id)
             )
             compression_tasks.append(task)
         
-        # Attendre que toutes les tâches soient complétées
         results = await asyncio.gather(*compression_tasks, return_exceptions=True)
-        
-        # Compter les succès
         success_count = sum(1 for r in results if r is True)
         
-        # Message final
         if success_count > 0:
             await start_msg.edit_text(f"✅ Toutes les compressions sont terminées ! {success_count}/{len(RESOLUTIONS)} versions générées")
         else:
@@ -209,7 +211,6 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await message.reply_text(error_msg)
         
     finally:
-        # Nettoyage du fichier d'entrée
         if input_path and os.path.exists(input_path):
             try:
                 os.remove(input_path)
@@ -218,9 +219,7 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.error(f"Erreur nettoyage input: {str(e)}")
 
 async def error_handler(update: Update, context: CallbackContext):
-    """Gère les erreurs globales"""
     logger.error(f"Exception while handling an update: {context.error}")
-    
     try:
         if update and update.message:
             await update.message.reply_text(
@@ -230,7 +229,6 @@ async def error_handler(update: Update, context: CallbackContext):
         pass
 
 def main():
-    """Point d'entrée principal"""
     print("🔍 Vérification de FFmpeg...")
     
     if not check_ffmpeg():
@@ -241,7 +239,6 @@ def main():
     print("✅ FFmpeg détecté - Démarrage du bot...")
     print("🌐 Mode: LOCAL API (fichiers jusqu'à 2GB supportés)")
     
-    # Configuration de l'application
     application = (
         Application.builder()
         .token(BOT_TOKEN)
@@ -253,7 +250,6 @@ def main():
         .build()
     )
     
-    # Filtres pour les types de vidéos supportés
     video_filter = (
         filters.VIDEO |
         filters.Document.MimeType("video/mp4") |
