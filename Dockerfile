@@ -3,7 +3,7 @@ FROM ubuntu:22.04
 # Éviter les prompts interactifs
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Installer les dépendances système
+# Installer les dépendances système (AJOUT de unzip)
 RUN apt-get update && apt-get install -y \
     wget \
     curl \
@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
     g++ \
     libssl-dev \
     zlib1g-dev \
+    unzip \  # ⬅️ AJOUT CRITIQUE
     python3 \
     python3-pip \
     ffmpeg \
@@ -27,6 +28,13 @@ RUN wget https://github.com/tdlib/telegram-bot-api/archive/refs/heads/master.zip
     cmake -DCMAKE_BUILD_TYPE=Release .. && \
     cmake --build . --target install && \
     cd /tmp && rm -rf telegram-bot-api-master bot-api.zip
+
+# Après l'installation, vérifier que tout est en place
+RUN echo "✅ Vérification des binaires installés..." && \
+    which ffmpeg && ffmpeg -version | head -1 && \
+    which telegram-bot-api && telegram-bot-api --version && \
+    which python3 && python3 --version && \
+    echo "✅ Toutes les dépendances sont installées"
 
 # Configurer l'application
 WORKDIR /app
