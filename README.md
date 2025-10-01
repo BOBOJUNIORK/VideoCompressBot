@@ -19,24 +19,24 @@ BOT_TOKEN=votre_token_bot
 API_ID=votre_api_id_telegram
 API_HASH=votre_api_hash_telegram
 
-Déploiement Railway:
+## Déploiement Railway:
 
 - Forkez ce repository
 - Déployez sur Railway
 - Configurez les variables d'environnement
 - C'est parti ! 🎉
 
-Déploiement local:
+### Déploiement local:
 docker-compose up -d
 
-📊 Résolutions supportées
+## 📊 Résolutions supportées
 
 - 360p (640x360)
 - 480p (854x480)
 - 720p (1280x720)
 - 1080p (1920x1080)
 
-🔧 Technologies
+## 🔧 Technologies
 
 - Python 3.11
 - Telegram Bot API Server
