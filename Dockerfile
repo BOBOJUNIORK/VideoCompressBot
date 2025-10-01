@@ -1,31 +1,16 @@
 FROM python:3.11-slim
 
-# Installer les dépendances de compilation
+# Installer les dépendances
 RUN apt-get update && apt-get install -y \
     wget \
     curl \
-    git \
-    build-essential \
-    cmake \
-    g++ \
-    libssl-dev \
-    zlib1g-dev \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# Cloner et compiler le Bot API Server depuis les sources
-WORKDIR /tmp
-RUN git clone https://github.com/tdlib/td.git && \
-    cd td && \
-    mkdir build && cd build && \
-    cmake -DCMAKE_BUILD_TYPE=Release .. && \
-    cmake --build . --target prepare_cross_compiling && \
-    cd .. && mkdir build2 && cd build2 && \
-    cmake -DCMAKE_BUILD_TYPE=Release .. && \
-    cmake --build . --target telegram-bot-api && \
-    cp bin/telegram-bot-api /usr/local/bin/ && \
-    chmod +x /usr/local/bin/telegram-bot-api && \
-    cd /tmp && rm -rf td
+# Télécharger depuis le bon dépôt et la bonne version
+RUN wget -O /usr/local/bin/telegram-bot-api \
+    "https://github.com/tdlib/telegram-bot-api/releases/download/v1.8.0/telegram-bot-api" && \
+    chmod +x /usr/local/bin/telegram-bot-api
 
 WORKDIR /app
 COPY requirements.txt .
