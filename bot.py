@@ -7,11 +7,16 @@ from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes, CallbackContext
 from telegram.request import HTTPXRequest
 
-# === CONFIGURATION ===
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8224488023:AAEa3arnhnVpltztSpi3M4x1oWT9kHLcRMU")
-WATERMARK_TEXT = os.getenv("WATERMARK_TEXT", "© MonBot")
+# === CONFIGURATION SÉCURISÉE ===
+# Les variables sensibles sont maintenant dans les variables d'environnement
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+WATERMARK_TEXT = os.getenv("WATERMARK_TEXT", "© HazardCompressBot")
 OUTPUT_DIR = "output_videos"
-MAX_FILE_SIZE = 2000 * 1024 * 1024  # 2GB pour le mode local
+MAX_FILE_SIZE = 2000 * 1024 * 1024  # 2GB
+
+# Vérification des variables critiques
+if not BOT_TOKEN:
+    raise ValueError("❌ BOT_TOKEN non défini! Définissez la variable d'environnement BOT_TOKEN")
 
 # Configuration du logging
 logging.basicConfig(
@@ -106,7 +111,6 @@ async def compress_and_send_single(input_path: str, resolution: str, message, us
                 )
             logger.info(f"✅ {resolution} envoyé avec succès ({file_size_mb}MB)")
         else:
-            # Pour les fichiers >50MB, on peut les diviser ou fournir un lien de téléchargement
             await message.reply_text(
                 f"📁 {resolution} - Fichier compressé ({file_size_mb}MB) trop gros pour Telegram\n"
                 f"💡 Solution: Réduisez la qualité ou la durée de la vidéo"
@@ -138,7 +142,7 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await message.reply_text("❌ Veuillez envoyer une vidéo (MP4, MKV, AVI, MOV...)")
             return
 
-        # Vérifier la taille du fichier - MAINTENANT 2GB AVEC MODE LOCAL
+        # Vérifier la taille du fichier
         if video.file_size > MAX_FILE_SIZE:
             await message.reply_text(
                 f"❌ Fichier trop volumineux. Taille maximale: {MAX_FILE_SIZE // (1024*1024)}MB"
@@ -148,7 +152,7 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Message de démarrage
         start_msg = await message.reply_text("🚀 Démarrage de la compression multi-résolution...")
         
-        # Télécharger la vidéo - MODE LOCAL POUR FICHIERS VOLUMINEUX
+        # Télécharger la vidéo
         file_id = video.file_id
         file = await context.bot.get_file(file_id)
         
@@ -234,16 +238,17 @@ def main():
 
     print("✅ FFmpeg détecté - Démarrage du bot...")
     print("🌐 Mode: LOCAL API (fichiers jusqu'à 2GB supportés)")
+    print(f"🔐 Bot configuré avec token sécurisé: {BOT_TOKEN[:10]}...")  # Log partiel pour vérification
     
-    # CONFIGURATION CRITIQUE PLE MODE LOCAL
+    # Configuration avec timeout étendus
     application = (
         Application.builder()
         .token(BOT_TOKEN)
-        .read_timeout(120)     # Timeout très long pour gros fichiers
-        .write_timeout(120)    # Timeout très long pour gros fichiers
-        .pool_timeout(120)     # Timeout du pool augmenté
-        .connect_timeout(120)  # Timeout de connexion augmenté
-        .get_updates_request(HTTPXRequest(http_version="1.1"))  # Meilleur pour gros fichiers
+        .read_timeout(120)
+        .write_timeout(120)
+        .pool_timeout(120)
+        .connect_timeout(120)
+        .get_updates_request(HTTPXRequest(http_version="1.1"))
         .build()
     )
     
@@ -264,6 +269,7 @@ def main():
     print("🚀 Bot démarré avec succès!")
     print("📹 Envoyez une vidéo pour la compresser en multiples résolutions")
     print(f"💾 Taille maximale supportée: {MAX_FILE_SIZE // (1024*1024)}MB")
+    print(f"🏷️  Filigrane: {WATERMARK_TEXT}")
     
     # Démarrer le bot
     application.run_polling(drop_pending_updates=True)
