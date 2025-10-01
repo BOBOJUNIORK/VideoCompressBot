@@ -1,30 +1,22 @@
 FROM python:3.11-slim
 
-# Installer les dépendances système
+# Installer les dépendances
 RUN apt-get update && apt-get install -y \
     wget \
     curl \
-    git \
-    build-essential \
-    cmake \
-    g++ \
-    libssl-dev \
-    zlib1g-dev \
-    unzip \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# Installer le Bot API Server
-WORKDIR /tmp
-RUN wget https://github.com/tdlib/telegram-bot-api/archive/refs/heads/master.zip -O bot-api.zip && \
-    unzip -q bot-api.zip && \
-    cd telegram-bot-api-master && \
-    mkdir build && cd build && \
-    cmake -DCMAKE_BUILD_TYPE=Release .. && \
-    cmake --build . --target install && \
-    cd /tmp && rm -rf telegram-bot-api-master bot-api.zip
+# Télécharger et installer le binaire précompilé
+RUN wget -O telegram-bot-api.tar.gz "https://github.com/tdlib/telegram-bot-api/releases/download/v7.8.0/telegram-bot-api_Linux_x86_64.tar.gz" && \
+    tar -xzf telegram-bot-api.tar.gz && \
+    mv telegram-bot-api /usr/local/bin/ && \
+    chmod +x /usr/local/bin/telegram-bot-api && \
+    rm telegram-bot-api.tar.gz
 
-# Configurer l'application
+# Vérifier l'installation
+RUN telegram-bot-api --version
+
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
