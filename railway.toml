@@ -1,8 +1,9 @@
-[deploy]
-maxUploadSize = "2gb"
-
 [build]
-builder = "nixpacks"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
 
-[variables]
-BOT_API_SERVER = "http://localhost:8081"
+[deploy]
+startCommand = "python bot.py"
+
+[[services]]
+name = "videocompressbot"
